@@ -76,7 +76,7 @@ public class GlobalExceptionHandler {
 
     @ExceptionHandler({BadCredentialsException.class, AuthenticationException.class, JwtException.class})
     public ResponseEntity<ErrorResponse> handleUnauthorized(
-            Exception ex, HttpServletRequest request) {
+            RuntimeException ex, HttpServletRequest request) {
         ErrorResponse response = ErrorResponse.builder()
                 .timestamp(LocalDateTime.now())
                 .status(HttpStatus.UNAUTHORIZED.value())
@@ -90,7 +90,7 @@ public class GlobalExceptionHandler {
 
     @ExceptionHandler({AccessDeniedException.class, AccessDeniedCustomException.class})
     public ResponseEntity<ErrorResponse> handleForbidden(
-            Exception ex, HttpServletRequest request) {
+            RuntimeException ex, HttpServletRequest request) {
         ErrorResponse response = ErrorResponse.builder()
                 .timestamp(LocalDateTime.now())
                 .status(HttpStatus.FORBIDDEN.value())

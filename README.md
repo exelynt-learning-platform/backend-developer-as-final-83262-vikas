@@ -129,6 +129,8 @@ The application is configured using environment variables with secure defaults:
 | `DB_PASSWORD` | Database password | *(empty)* |
 | `JWT_SECRET` | HMAC-SHA512 Secret Key (min 64 bytes) | **Required in production via environment variable**. For local development, if omitted, a cryptographically secure 512-bit key is automatically generated at startup. |
 | `JWT_EXPIRATION_MS` | JWT token validity in milliseconds | `86400000` (24 hours) |
+| `APP_SEED_ENABLED` | Enable test seed accounts | `true` in `local`/`dev`/`test` profiles; disabled in `prod` |
+| `SPRING_PROFILES_ACTIVE` | Active Spring profile | `local` (default). In production, set to `prod` to disable H2 console and test seeding. |
 
 ### Creating Database in MySQL (if needed)
 

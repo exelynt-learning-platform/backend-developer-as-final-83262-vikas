@@ -6,6 +6,7 @@ import com.example.authsystem.dto.reservation.ReservationResponse;
 import com.example.authsystem.dto.reservation.ReservationUpdateRequest;
 import com.example.authsystem.entity.*;
 import com.example.authsystem.exception.BadRequestException;
+import com.example.authsystem.exception.ResourceConflictException;
 import com.example.authsystem.exception.ResourceNotFoundException;
 import com.example.authsystem.repository.ReservationRepository;
 import com.example.authsystem.repository.ReservationSpecification;
@@ -47,10 +48,15 @@ public class ReservationService {
 
         Resource resource = findResourceById(request.getResourceId());
         validateResourceAvailability(resource);
+        validateNoOverlappingReservation(resource.getId(), null, request.getStartTime(), request.getEndTime());
 
         // Uses reference proxy to avoid redundant SELECT query on user entity
         User userProxy = userRepository.getReferenceById(currentUser.getId());
-        ReservationStatus initialStatus = request.getStatus() != null ? request.getStatus() : ReservationStatus.PENDING;
+
+        // USER role is strictly forced to PENDING status at creation; only ADMIN may override
+        ReservationStatus initialStatus = (currentUser.getRole() == Role.ADMIN && request.getStatus() != null)
+                ? request.getStatus()
+                : ReservationStatus.PENDING;
 
         Reservation reservation = Reservation.builder()
                 .user(userProxy)
@@ -116,6 +122,13 @@ public class ReservationService {
         validatePrice(request.getPrice());
         validateReservationStatus(request.getStatus());
 
+        if (request.getStatus() != ReservationStatus.CANCELLED) {
+            validateResourceAvailability(reservation.getResource());
+            validateNoOverlappingReservation(
+                    reservation.getResource().getId(), reservation.getId(), request.getStartTime(), request.getEndTime()
+            );
+        }
+
         reservation.setStartTime(request.getStartTime());
         reservation.setEndTime(request.getEndTime());
         reservation.setPrice(request.getPrice());
@@ -160,6 +173,22 @@ public class ReservationService {
     private void validateResourceAvailability(Resource resource) {
         if (!Boolean.TRUE.equals(resource.getAvailable())) {
             throw new BadRequestException("Resource '" + resource.getName() + "' is currently marked as unavailable");
+        }
+    }
+
+    private void validateNoOverlappingReservation(Long resourceId, Long excludeReservationId, LocalDateTime startTime, LocalDateTime endTime) {
+        boolean overlapping;
+        if (excludeReservationId != null) {
+            overlapping = reservationRepository.existsOverlappingReservationExcluding(
+                    resourceId, excludeReservationId, ReservationStatus.CANCELLED, startTime, endTime
+            );
+        } else {
+            overlapping = reservationRepository.existsOverlappingReservation(
+                    resourceId, ReservationStatus.CANCELLED, startTime, endTime
+            );
+        }
+        if (overlapping) {
+            throw new ResourceConflictException("Resource is already reserved for the selected time window");
         }
     }
 

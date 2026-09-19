@@ -386,4 +386,64 @@ public class ReservationControllerTest {
                 .andExpect(jsonPath("$.status", is(400)))
                 .andExpect(jsonPath("$.message", containsString("Invalid sort field")));
     }
+
+    @Test
+    @DisplayName("USER cannot self-assign CONFIRMED status at creation; strictly forced to PENDING")
+    void testUser_cannotForceConfirmedStatus() throws Exception {
+        LocalDateTime start = LocalDateTime.now().plusDays(10).withNano(0);
+        LocalDateTime end = start.plusHours(2);
+
+        ReservationRequest request = ReservationRequest.builder()
+                .resourceId(testResourceId)
+                .startTime(start)
+                .endTime(end)
+                .price(new BigDecimal("180.00"))
+                .status(ReservationStatus.CONFIRMED) // USER attempts to bypass workflow
+                .build();
+
+        mockMvc.perform(post("/api/reservations")
+                        .header("Authorization", user1Token)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(request)))
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.status", is("PENDING"))); // Must be forced to PENDING
+    }
+
+    @Test
+    @DisplayName("Overlapping reservation on same resource returns 409 Conflict")
+    void testReservation_overlapConflict() throws Exception {
+        LocalDateTime start = LocalDateTime.now().plusDays(15).withNano(0);
+        LocalDateTime end = start.plusHours(3);
+
+        ReservationRequest initial = ReservationRequest.builder()
+                .resourceId(testResourceId)
+                .startTime(start)
+                .endTime(end)
+                .price(new BigDecimal("100.00"))
+                .build();
+
+        // First reservation succeeds
+        mockMvc.perform(post("/api/reservations")
+                        .header("Authorization", user1Token)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(initial)))
+                .andExpect(status().isCreated());
+
+        // Second reservation overlapping with first time window [start + 1h, end + 1h]
+        ReservationRequest overlapping = ReservationRequest.builder()
+                .resourceId(testResourceId)
+                .startTime(start.plusHours(1))
+                .endTime(end.plusHours(1))
+                .price(new BigDecimal("120.00"))
+                .build();
+
+        mockMvc.perform(post("/api/reservations")
+                        .header("Authorization", user1Token)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(overlapping)))
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.status", is(409)))
+                .andExpect(jsonPath("$.message", containsString("already reserved")));
+    }
 }
+
