@@ -11,6 +11,7 @@ import io.swagger.v3.oas.annotations.security.SecurityRequirement;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
+import com.example.authsystem.entity.Role;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.domain.Sort;
@@ -30,7 +31,7 @@ public class ResourceController {
     private final ResourceService resourceService;
 
     @GetMapping
-    @PreAuthorize("hasAnyRole('ADMIN', 'USER')")
+    @PreAuthorize("hasAnyRole('" + Role.ROLE_ADMIN + "', '" + Role.ROLE_USER + "')")
     @Operation(summary = "List all resources", description = "Accessible by both ADMIN and USER roles. Supports pagination and sorting.")
     @ApiResponses(value = {
             @ApiResponse(responseCode = "200", description = "List of resources successfully retrieved"),
@@ -43,7 +44,7 @@ public class ResourceController {
     }
 
     @GetMapping("/{id}")
-    @PreAuthorize("hasAnyRole('ADMIN', 'USER')")
+    @PreAuthorize("hasAnyRole('" + Role.ROLE_ADMIN + "', '" + Role.ROLE_USER + "')")
     @Operation(summary = "Get resource by ID", description = "Accessible by both ADMIN and USER roles.")
     @ApiResponses(value = {
             @ApiResponse(responseCode = "200", description = "Resource found"),
@@ -56,7 +57,7 @@ public class ResourceController {
     }
 
     @PostMapping
-    @PreAuthorize("hasRole('ADMIN')")
+    @PreAuthorize("hasRole('" + Role.ROLE_ADMIN + "')")
     @Operation(summary = "Create a new resource", description = "Accessible ONLY by ADMIN.")
     @ApiResponses(value = {
             @ApiResponse(responseCode = "201", description = "Resource successfully created"),
@@ -71,7 +72,7 @@ public class ResourceController {
     }
 
     @PutMapping("/{id}")
-    @PreAuthorize("hasRole('ADMIN')")
+    @PreAuthorize("hasRole('" + Role.ROLE_ADMIN + "')")
     @Operation(summary = "Update an existing resource", description = "Accessible ONLY by ADMIN.")
     @ApiResponses(value = {
             @ApiResponse(responseCode = "200", description = "Resource successfully updated"),
@@ -89,7 +90,7 @@ public class ResourceController {
     }
 
     @DeleteMapping("/{id}")
-    @PreAuthorize("hasRole('ADMIN')")
+    @PreAuthorize("hasRole('" + Role.ROLE_ADMIN + "')")
     @Operation(summary = "Delete a resource", description = "Accessible ONLY by ADMIN.")
     @ApiResponses(value = {
             @ApiResponse(responseCode = "204", description = "Resource successfully deleted"),
@@ -102,3 +103,4 @@ public class ResourceController {
         return ResponseEntity.noContent().build();
     }
 }
+

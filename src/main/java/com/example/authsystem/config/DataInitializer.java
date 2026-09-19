@@ -9,6 +9,7 @@ import lombok.RequiredArgsConstructor;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.boot.CommandLineRunner;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Transactional;
@@ -26,61 +27,55 @@ public class DataInitializer implements CommandLineRunner {
     @Override
     @Transactional
     public void run(String... args) {
-        seedUsers();
+        seedUserIfAbsent("admin", "admin@example.com", "Admin@123", Role.ADMIN);
+        seedUserIfAbsent("user", "user@example.com", "User@123", Role.USER);
         seedSampleResources();
     }
 
-    private void seedUsers() {
-        if (userRepository.findByUsername("admin").isEmpty()) {
-            User admin = User.builder()
-                    .username("admin")
-                    .email("admin@example.com")
-                    .password(passwordEncoder.encode("Admin@123"))
-                    .role(Role.ADMIN)
-                    .build();
-            userRepository.save(admin);
-            log.info("Initialized test seed user: [admin] with role ADMIN");
-        }
-
-        if (userRepository.findByUsername("user").isEmpty()) {
-            User user = User.builder()
-                    .username("user")
-                    .email("user@example.com")
-                    .password(passwordEncoder.encode("User@123"))
-                    .role(Role.USER)
-                    .build();
-            userRepository.save(user);
-            log.info("Initialized test seed user: [user] with role USER");
+    private void seedUserIfAbsent(String username, String email, String rawPassword, Role role) {
+        try {
+            boolean userExists = userRepository.existsByUsername(username) || userRepository.existsByEmail(email);
+            if (!userExists) {
+                User user = User.builder()
+                        .username(username)
+                        .email(email)
+                        .password(passwordEncoder.encode(rawPassword))
+                        .role(role)
+                        .build();
+                userRepository.save(user);
+                log.info("Initialized test seed user: [{}] with role {}", username, role);
+            }
+        } catch (DataIntegrityViolationException e) {
+            log.warn("User [{}] or email [{}] was already created concurrently: {}", username, email, e.getMessage());
         }
     }
 
     private void seedSampleResources() {
-        if (resourceRepository.count() == 0) {
-            Resource r1 = Resource.builder()
-                    .name("Conference Room A")
-                    .description("Executive conference room with 4K display and conference phone")
-                    .type("CONFERENCE_ROOM")
-                    .available(true)
-                    .build();
+        seedResourceIfAbsent("Conference Room A",
+                "Executive conference room with 4K display and conference phone",
+                "CONFERENCE_ROOM", true);
+        seedResourceIfAbsent("Projector 4K Pro",
+                "High-definition portable projector with HDMI and wireless casting",
+                "EQUIPMENT", true);
+        seedResourceIfAbsent("Private Workstation Pod 101",
+                "Soundproof quiet booth with standing desk and dual monitors",
+                "WORKSPACE", true);
+    }
 
-            Resource r2 = Resource.builder()
-                    .name("Projector 4K Pro")
-                    .description("High-definition portable projector with HDMI and wireless casting")
-                    .type("EQUIPMENT")
-                    .available(true)
-                    .build();
-
-            Resource r3 = Resource.builder()
-                    .name("Private Workstation Pod 101")
-                    .description("Soundproof quiet booth with standing desk and dual monitors")
-                    .type("WORKSPACE")
-                    .available(true)
-                    .build();
-
-            resourceRepository.save(r1);
-            resourceRepository.save(r2);
-            resourceRepository.save(r3);
-            log.info("Initialized sample resources for testing");
+    private void seedResourceIfAbsent(String name, String description, String type, boolean available) {
+        try {
+            if (!resourceRepository.existsByNameIgnoreCase(name)) {
+                Resource resource = Resource.builder()
+                        .name(name)
+                        .description(description)
+                        .type(type)
+                        .available(available)
+                        .build();
+                resourceRepository.save(resource);
+                log.info("Initialized sample resource: [{}]", name);
+            }
+        } catch (DataIntegrityViolationException e) {
+            log.warn("Resource [{}] was already created concurrently: {}", name, e.getMessage());
         }
     }
 }

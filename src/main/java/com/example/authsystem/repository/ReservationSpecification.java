@@ -2,6 +2,9 @@ package com.example.authsystem.repository;
 
 import com.example.authsystem.entity.Reservation;
 import com.example.authsystem.entity.ReservationStatus;
+import com.example.authsystem.entity.User;
+import jakarta.persistence.criteria.Join;
+import jakarta.persistence.criteria.JoinType;
 import jakarta.persistence.criteria.Predicate;
 import org.springframework.data.jpa.domain.Specification;
 
@@ -11,6 +14,11 @@ import java.util.List;
 
 public class ReservationSpecification {
 
+    /**
+     * Constructs a dynamic query specification for reservations.
+     * Incorporates direct database JOIN authorization for user tenant filtering,
+     * avoiding in-memory owner ID collections or large SQL IN-clauses.
+     */
     public static Specification<Reservation> filterReservations(
             Long userId,
             ReservationStatus status,
@@ -19,8 +27,10 @@ public class ReservationSpecification {
         return (root, query, criteriaBuilder) -> {
             List<Predicate> predicates = new ArrayList<>();
 
+            // Direct SQL JOIN authorization directly within the query predicate
             if (userId != null) {
-                predicates.add(criteriaBuilder.equal(root.get("user").get("id"), userId));
+                Join<Reservation, User> userJoin = root.join("user", JoinType.INNER);
+                predicates.add(criteriaBuilder.equal(userJoin.get("id"), userId));
             }
 
             if (status != null) {

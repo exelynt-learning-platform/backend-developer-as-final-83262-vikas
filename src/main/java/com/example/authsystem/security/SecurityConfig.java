@@ -1,5 +1,6 @@
 package com.example.authsystem.security;
 
+import com.example.authsystem.entity.Role;
 import lombok.RequiredArgsConstructor;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -75,10 +76,10 @@ public class SecurityConfig {
                         .requestMatchers("/h2-console/**").permitAll()
 
                         // Resource endpoints RBAC
-                        .requestMatchers(HttpMethod.GET, "/api/resources/**").hasAnyRole("ADMIN", "USER")
-                        .requestMatchers(HttpMethod.POST, "/api/resources/**").hasRole("ADMIN")
-                        .requestMatchers(HttpMethod.PUT, "/api/resources/**").hasRole("ADMIN")
-                        .requestMatchers(HttpMethod.DELETE, "/api/resources/**").hasRole("ADMIN")
+                        .requestMatchers(HttpMethod.GET, "/api/resources/**").hasAnyRole(Role.ROLE_ADMIN, Role.ROLE_USER)
+                        .requestMatchers(HttpMethod.POST, "/api/resources/**").hasRole(Role.ROLE_ADMIN)
+                        .requestMatchers(HttpMethod.PUT, "/api/resources/**").hasRole(Role.ROLE_ADMIN)
+                        .requestMatchers(HttpMethod.DELETE, "/api/resources/**").hasRole(Role.ROLE_ADMIN)
 
                         // Reservation endpoints RBAC (enforced via SecurityContext & service logic)
                         .requestMatchers("/api/reservations/**").authenticated()

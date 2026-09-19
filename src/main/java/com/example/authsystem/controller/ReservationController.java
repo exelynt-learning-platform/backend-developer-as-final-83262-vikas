@@ -5,6 +5,7 @@ import com.example.authsystem.dto.reservation.ReservationRequest;
 import com.example.authsystem.dto.reservation.ReservationResponse;
 import com.example.authsystem.dto.reservation.ReservationUpdateRequest;
 import com.example.authsystem.entity.ReservationStatus;
+import com.example.authsystem.entity.Role;
 import com.example.authsystem.security.CustomUserDetails;
 import com.example.authsystem.service.ReservationService;
 import io.swagger.v3.oas.annotations.Operation;
@@ -17,6 +18,7 @@ import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.*;
 
@@ -32,6 +34,7 @@ public class ReservationController {
     private final ReservationService reservationService;
 
     @PostMapping
+    @PreAuthorize("hasAnyRole('" + Role.ROLE_ADMIN + "', '" + Role.ROLE_USER + "')")
     @Operation(summary = "Create a reservation", description = "Creates a new reservation. User identity is strictly resolved from the authenticated JWT token.")
     @ApiResponses(value = {
             @ApiResponse(responseCode = "201", description = "Reservation successfully created"),
@@ -47,6 +50,7 @@ public class ReservationController {
     }
 
     @GetMapping
+    @PreAuthorize("hasAnyRole('" + Role.ROLE_ADMIN + "', '" + Role.ROLE_USER + "')")
     @Operation(summary = "List reservations with filtering, pagination, and sorting",
             description = "ADMIN users see all reservations; USER role only sees their own reservations. Supports filtering by status, minPrice, and maxPrice.")
     @ApiResponses(value = {
@@ -82,6 +86,7 @@ public class ReservationController {
     }
 
     @GetMapping("/{id}")
+    @PreAuthorize("hasAnyRole('" + Role.ROLE_ADMIN + "', '" + Role.ROLE_USER + "')")
     @Operation(summary = "Get reservation by ID", description = "ADMIN users can access any reservation. Regular users can only access their own reservation.")
     @ApiResponses(value = {
             @ApiResponse(responseCode = "200", description = "Reservation found"),
@@ -97,6 +102,7 @@ public class ReservationController {
     }
 
     @PutMapping("/{id}")
+    @PreAuthorize("hasAnyRole('" + Role.ROLE_ADMIN + "', '" + Role.ROLE_USER + "')")
     @Operation(summary = "Update an existing reservation", description = "ADMIN users can update any reservation. Regular users can only update their own reservation.")
     @ApiResponses(value = {
             @ApiResponse(responseCode = "200", description = "Reservation successfully updated"),
@@ -114,6 +120,7 @@ public class ReservationController {
     }
 
     @DeleteMapping("/{id}")
+    @PreAuthorize("hasAnyRole('" + Role.ROLE_ADMIN + "', '" + Role.ROLE_USER + "')")
     @Operation(summary = "Delete or cancel a reservation", description = "ADMIN users can delete any reservation. Regular users can only delete/cancel their own reservation.")
     @ApiResponses(value = {
             @ApiResponse(responseCode = "204", description = "Reservation successfully deleted"),
@@ -128,3 +135,4 @@ public class ReservationController {
         return ResponseEntity.noContent().build();
     }
 }
+

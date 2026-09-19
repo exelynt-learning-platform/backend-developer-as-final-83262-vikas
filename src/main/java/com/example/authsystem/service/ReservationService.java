@@ -5,7 +5,6 @@ import com.example.authsystem.dto.reservation.ReservationRequest;
 import com.example.authsystem.dto.reservation.ReservationResponse;
 import com.example.authsystem.dto.reservation.ReservationUpdateRequest;
 import com.example.authsystem.entity.*;
-import com.example.authsystem.exception.AccessDeniedCustomException;
 import com.example.authsystem.exception.BadRequestException;
 import com.example.authsystem.exception.ResourceNotFoundException;
 import com.example.authsystem.repository.ReservationRepository;
@@ -24,6 +23,8 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Set;
 
 @Service
@@ -37,27 +38,22 @@ public class ReservationService {
     private final ReservationRepository reservationRepository;
     private final ResourceRepository resourceRepository;
     private final UserRepository userRepository;
+    private final ReservationAuthorizationService authorizationService;
 
     @Transactional
     public ReservationResponse createReservation(ReservationRequest request, CustomUserDetails currentUser) {
         validateReservationTimes(request.getStartTime(), request.getEndTime());
         validatePrice(request.getPrice());
 
-        // Always resolve user strictly from authenticated SecurityContext / JWT
-        User user = userRepository.findById(currentUser.getId())
-                .orElseThrow(() -> new ResourceNotFoundException("Authenticated user not found in database"));
+        Resource resource = findResourceById(request.getResourceId());
+        validateResourceAvailability(resource);
 
-        Resource resource = resourceRepository.findById(request.getResourceId())
-                .orElseThrow(() -> new ResourceNotFoundException("Resource not found with ID: " + request.getResourceId()));
-
-        if (!Boolean.TRUE.equals(resource.getAvailable())) {
-            throw new BadRequestException("Resource '" + resource.getName() + "' is currently marked as unavailable");
-        }
-
+        // Uses reference proxy to avoid redundant SELECT query on user entity
+        User userProxy = userRepository.getReferenceById(currentUser.getId());
         ReservationStatus initialStatus = request.getStatus() != null ? request.getStatus() : ReservationStatus.PENDING;
 
         Reservation reservation = Reservation.builder()
-                .user(user)
+                .user(userProxy)
                 .resource(resource)
                 .startTime(request.getStartTime())
                 .endTime(request.getEndTime())
@@ -79,18 +75,13 @@ public class ReservationService {
             String[] sortParams,
             CustomUserDetails currentUser) {
 
-        if (page < 0) {
-            throw new BadRequestException("Page index must not be less than zero");
-        }
-        if (size <= 0) {
-            throw new BadRequestException("Page size must be greater than zero");
-        }
+        validatePaginationParameters(page, size);
 
         Sort sort = buildValidatedSort(sortParams);
         Pageable pageable = PageRequest.of(page, size, sort);
 
-        // RBAC: If USER, restrict query to only their own reservations.
-        // If ADMIN, allow querying across all reservations.
+        // RBAC: If USER, restrict query directly via SQL join to their own user ID.
+        // If ADMIN, query across all reservations.
         Long targetUserId = (currentUser.getRole() == Role.ADMIN) ? null : currentUser.getId();
 
         Specification<Reservation> spec = ReservationSpecification.filterReservations(
@@ -104,26 +95,31 @@ public class ReservationService {
     }
 
     @Transactional(readOnly = true)
+    public Page<ReservationResponse> findAuthorizedReservationList(Long userId, Pageable pageable) {
+        return reservationRepository.findByUserId(userId, pageable)
+                .map(this::mapToResponse);
+    }
+
+    @Transactional(readOnly = true)
     public ReservationResponse getReservationById(Long id, CustomUserDetails currentUser) {
         Reservation reservation = findReservationById(id);
-        enforceOwnershipOrAdmin(reservation, currentUser);
+        authorizationService.checkOwnershipOrAdmin(reservation, currentUser);
         return mapToResponse(reservation);
     }
 
     @Transactional
     public ReservationResponse updateReservation(Long id, ReservationUpdateRequest request, CustomUserDetails currentUser) {
         Reservation reservation = findReservationById(id);
-        enforceOwnershipOrAdmin(reservation, currentUser);
+        authorizationService.checkOwnershipOrAdmin(reservation, currentUser);
 
         validateReservationTimes(request.getStartTime(), request.getEndTime());
         validatePrice(request.getPrice());
+        validateReservationStatus(request.getStatus());
 
         reservation.setStartTime(request.getStartTime());
         reservation.setEndTime(request.getEndTime());
         reservation.setPrice(request.getPrice());
-        if (request.getStatus() != null) {
-            reservation.setStatus(request.getStatus());
-        }
+        reservation.setStatus(request.getStatus());
 
         Reservation updated = reservationRepository.save(reservation);
         return mapToResponse(updated);
@@ -132,7 +128,7 @@ public class ReservationService {
     @Transactional
     public void deleteReservation(Long id, CustomUserDetails currentUser) {
         Reservation reservation = findReservationById(id);
-        enforceOwnershipOrAdmin(reservation, currentUser);
+        authorizationService.checkOwnershipOrAdmin(reservation, currentUser);
         reservationRepository.delete(reservation);
     }
 
@@ -141,13 +137,9 @@ public class ReservationService {
                 .orElseThrow(() -> new ResourceNotFoundException("Reservation not found with ID: " + id));
     }
 
-    private void enforceOwnershipOrAdmin(Reservation reservation, CustomUserDetails currentUser) {
-        if (currentUser.getRole() == Role.ADMIN) {
-            return; // ADMIN has full access
-        }
-        if (!reservation.getUser().getId().equals(currentUser.getId())) {
-            throw new AccessDeniedCustomException("You do not have permission to access another user's reservation");
-        }
+    private Resource findResourceById(Long id) {
+        return resourceRepository.findById(id)
+                .orElseThrow(() -> new ResourceNotFoundException("Resource not found with ID: " + id));
     }
 
     private void validateReservationTimes(LocalDateTime startTime, LocalDateTime endTime) {
@@ -165,14 +157,34 @@ public class ReservationService {
         }
     }
 
+    private void validateResourceAvailability(Resource resource) {
+        if (!Boolean.TRUE.equals(resource.getAvailable())) {
+            throw new BadRequestException("Resource '" + resource.getName() + "' is currently marked as unavailable");
+        }
+    }
+
+    private void validateReservationStatus(ReservationStatus status) {
+        if (status == null) {
+            throw new BadRequestException("Reservation status is required");
+        }
+    }
+
+    private void validatePaginationParameters(int page, int size) {
+        if (page < 0) {
+            throw new BadRequestException("Page index must not be less than zero");
+        }
+        if (size <= 0) {
+            throw new BadRequestException("Page size must be greater than zero");
+        }
+    }
+
     private Sort buildValidatedSort(String[] sortParams) {
         if (sortParams == null || sortParams.length == 0) {
             return Sort.by(Sort.Direction.DESC, "createdAt");
         }
 
-        java.util.List<Sort.Order> orders = new java.util.ArrayList<>();
+        List<Sort.Order> orders = new ArrayList<>();
 
-        // Spring MVC splits ?sort=price,desc into String[] {"price", "desc"}
         if (sortParams.length == 2 && (sortParams[1].equalsIgnoreCase("asc") || sortParams[1].equalsIgnoreCase("desc"))) {
             String property = sortParams[0].trim();
             validateSortProperty(property);
